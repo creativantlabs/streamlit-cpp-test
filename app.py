@@ -68,15 +68,8 @@ _BASE_CSS = """
     [data-testid="stMetric"] { text-align: center; padding: 0.4rem; }
     [data-testid="stMetricValue"] { font-size: 1.4rem; }
 
-    /* Wrappers used to conditionally show settings UI */
-    .mobile-only { display: none; }
-    .desktop-only { display: block; }
-
-    /* Mobile: show inline expander; hide sidebar *content* only */
+    /* Mobile spacing tweaks */
     @media (max-width: 768px) {
-        .mobile-only { display: block; }
-        .desktop-only { display: none; }
-
         .block-container {
             padding-left: 0.5rem !important;
             padding-right: 0.5rem !important;
@@ -183,7 +176,7 @@ def main() -> None:
         page_title="C++ Quiz — Computation in Engineering 1",
         page_icon="💻",
         layout="centered",
-        initial_sidebar_state="expanded",
+        initial_sidebar_state="collapsed",
     )
 
     # Inject base CSS
@@ -192,33 +185,16 @@ def main() -> None:
     # ── Header ───────────────────────────────────────────────────────────
     st.title("C++ Practice and Revision Questions")
     st.caption(
-        f"150 questions from variable declarations to templates & move semantics."
+        f"[Computation in Engineering 1]({COURSE_URL}) — TUM School of Engineering and Design  \n"
+        "150 questions from variable declarations to templates & move semantics."
     )
 
     questions = get_questions()
     q_by_id = _get_by_id(questions)
 
-    # ── Settings: render BOTH, CSS decides visibility ────────────────────
-    with st.sidebar:
-        st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
-        st.subheader("Settings & Filters")
-        shuffle_d, show_expl_d, topics_d, diff_d = _render_settings(questions, key_prefix="desk")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown('<div class="mobile-only">', unsafe_allow_html=True)
+    # ── Settings (no sidebar) ────────────────────────────────────────────
     with st.expander("Settings & Filters", expanded="quiz" not in st.session_state):
-        shuffle_m, show_expl_m, topics_m, diff_m = _render_settings(questions, key_prefix="mob")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # Pick the active settings based on screen size (CSS decides what's visible).
-    # If the mobile controls are visible, users interact with those; otherwise desktop.
-    # We default to desktop values unless mobile values exist and differ.
-    # (Streamlit will still create both sets of widgets; this keeps behavior intuitive.)
-    use_mobile = st.session_state.get("mob_diff") is not None and st.session_state.get("mob_topics") is not None
-    shuffle = shuffle_m if use_mobile else shuffle_d
-    show_expl = show_expl_m if use_mobile else show_expl_d
-    selected_topics = topics_m if use_mobile else topics_d
-    diff_range = diff_m if use_mobile else diff_d
+        shuffle, show_expl, selected_topics, diff_range = _render_settings(questions, key_prefix="settings")
 
     # ── Start/Restart button (always visible) ────────────────────────────
     start_label = "Restart" if "quiz" in st.session_state else "Start"
