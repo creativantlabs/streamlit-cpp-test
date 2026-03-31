@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from typing import Literal
 
@@ -44,12 +45,14 @@ def get_questions() -> list[Question]:
         difficulty: int,
         code_snippet: str | None = None,
     ) -> None:
+        shuffled = options[:]
+        random.Random(len(q)).shuffle(shuffled)
         q.append(
             Question(
                 id=len(q) + 1,
                 type="mcq",
                 prompt=prompt,
-                options=options,
+                options=shuffled,
                 answer=answer,
                 explanation=explanation,
                 topic=topic,
