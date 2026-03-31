@@ -74,11 +74,8 @@ _BASE_CSS = """
 
     /* Mobile: hide sidebar; show mobile expander */
     @media (max-width: 768px) {
-        section[data-testid="stSidebar"],
-        button[data-testid="stSidebarCollapsedControl"],
-        [data-testid="collapsedControl"] {
-            display: none !important;
-        }
+        /* Hide the sidebar panel on mobile, but keep the reopen button visible. */
+        section[data-testid="stSidebar"] { display: none !important; }
         .mobile-only { display: block; }
         .desktop-only { display: none; }
 
@@ -189,7 +186,7 @@ def main() -> None:
     st.markdown(_BASE_CSS, unsafe_allow_html=True)
 
     # ── Header ───────────────────────────────────────────────────────────
-    st.title("C++ Quiz")
+    st.title("C++ Pa")
     st.caption(
         f"[Computation in Engineering 1]({COURSE_URL}) — TUM School of Engineering and Design  \n"
         "150 questions from variable declarations to templates & move semantics."
