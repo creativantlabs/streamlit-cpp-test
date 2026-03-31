@@ -186,10 +186,9 @@ def main() -> None:
     st.markdown(_BASE_CSS, unsafe_allow_html=True)
 
     # ── Header ───────────────────────────────────────────────────────────
-    st.title("C++ Pa")
+    st.title("C++ Practice and Revision Questions")
     st.caption(
-        f"[Computation in Engineering 1]({COURSE_URL}) — TUM School of Engineering and Design  \n"
-        "150 questions from variable declarations to templates & move semantics."
+        f"[150 questions from variable declarations to templates & move semantics."
     )
 
     questions = get_questions()
