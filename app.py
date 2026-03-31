@@ -73,8 +73,19 @@ def _difficulty_badge(level: int) -> str:
     return f"{stars}  {label}"
 
 
+_HIDE_CHROME = """
+<style>
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    [data-testid="stToolbar"] {display: none;}
+</style>
+"""
+
+
 def main() -> None:
     st.set_page_config(page_title="C++ Quiz — 150 Questions", layout="centered")
+    st.markdown(_HIDE_CHROME, unsafe_allow_html=True)
 
     st.title("C++ Quiz")
     st.caption(
