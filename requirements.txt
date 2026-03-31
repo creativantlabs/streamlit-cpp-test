@@ -1,2 +1,4 @@
 streamlit>=1.33
 streamlit-js-eval
+gspread
+google-auth

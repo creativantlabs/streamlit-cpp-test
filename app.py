@@ -8,6 +8,8 @@ import streamlit as st
 from streamlit_js_eval import streamlit_js_eval
 
 from questions import Question, get_questions
+# To enable Google Sheets logging, uncomment the next line and see README.md:
+# from sheets_logger import log_submission, log_completion
 
 MOBILE_BREAKPOINT = 768
 
@@ -197,7 +199,9 @@ def main() -> None:
     # ── Header ───────────────────────────────────────────────────────────
     st.title("C++ Practice and Revision Questions")
     st.caption(
-        f"150 questions from variable declarations to templates & move semantics."
+        "[Computation in Engineering 1](https://www.cee.ed.tum.de/ccbe/teaching/master/computation-in-engineering-1/) "
+        "— TUM School of Engineering and Design  \n"
+        "150 questions from variable declarations to templates & move semantics."
     )
 
     questions = get_questions()
@@ -330,6 +334,7 @@ def main() -> None:
             "user_answer": user_answer,
             "correct": bool(correct),
         }
+
         st.rerun()
 
     if qid in answers:
