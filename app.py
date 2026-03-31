@@ -5,6 +5,7 @@ import re
 from dataclasses import asdict
 
 import streamlit as st
+from streamlit_js_eval import streamlit_js_eval
 
 from questions import Question, get_questions
 
@@ -35,19 +36,11 @@ TOPIC_LABELS = {
     "templates": "Templates",
 }
 
-# ── CSS: base styles shared by both modes ────────────────────────────────
-_BASE_CSS = """
+_HIDE_CHROME_CSS = """
 <style>
     [data-testid="stToolbar"] {display: none !important;}
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
-
-    .stApp { max-width: 100vw; overflow-x: hidden; }
-    .block-container {
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-        padding-top: 1rem !important;
-    }
 
     .stButton > button {
         min-height: 48px; font-size: 1rem; border-radius: 10px;
@@ -64,28 +57,34 @@ _BASE_CSS = """
         overflow-x: auto !important; -webkit-overflow-scrolling: touch;
         font-size: 0.85rem; max-width: 100%;
     }
-    .stProgress > div { width: 100% !important; }
     [data-testid="stMetric"] { text-align: center; padding: 0.4rem; }
     [data-testid="stMetricValue"] { font-size: 1.4rem; }
-
-    /* Mobile spacing tweaks */
-    @media (max-width: 768px) {
-        .block-container {
-            padding-left: 0.5rem !important;
-            padding-right: 0.5rem !important;
-            padding-top: 0.5rem !important;
-            max-width: 100% !important;
-        }
-        h1 { font-size: 1.5rem !important; }
-        h3 { font-size: 1.1rem !important; }
-        .stRadio > div[role="radiogroup"] > label {
-            font-size: 0.95rem; padding: 0.5rem 0.3rem;
-        }
-        [data-testid="stMetricValue"] { font-size: 1.2rem; }
-        pre { font-size: 0.78rem; }
-    }
 </style>
 """
+
+_MOBILE_HIDE_SIDEBAR_CSS = """
+<style>
+    section[data-testid="stSidebar"],
+    button[data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"] {
+        display: none !important;
+    }
+    .block-container {
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+        padding-top: 0.5rem !important;
+        max-width: 100% !important;
+    }
+    h1 { font-size: 1.5rem !important; }
+    h3 { font-size: 1.1rem !important; }
+    .stRadio > div[role="radiogroup"] > label {
+        font-size: 0.95rem; padding: 0.5rem 0.3rem;
+    }
+    [data-testid="stMetricValue"] { font-size: 1.2rem; }
+    pre { font-size: 0.78rem; }
+</style>
+"""
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -129,10 +128,10 @@ def _difficulty_badge(level: int) -> str:
     return f"{stars}  {label}"
 
 
-def _render_settings(questions: list[Question], *, key_prefix: str) -> tuple[bool, bool, list[str], tuple[int, int]]:
-    """Render quiz settings controls (without start button)."""
-    shuffle = st.toggle("Shuffle questions", value=False, key=f"{key_prefix}_shuffle")
-    show_expl = st.toggle("Show explanation after submit", value=True, key=f"{key_prefix}_show_expl")
+def _render_settings(questions: list[Question]) -> tuple[bool, bool, list[str], tuple[int, int]]:
+    """Render filter/settings controls. Returns (shuffle, show_expl, topics, diff_range)."""
+    shuffle = st.toggle("Shuffle questions", value=False)
+    show_expl = st.toggle("Show explanation after submit", value=True)
 
     topics = sorted({q.topic for q in questions})
     selected_topics = st.multiselect(
@@ -140,9 +139,8 @@ def _render_settings(questions: list[Question], *, key_prefix: str) -> tuple[boo
         options=topics,
         default=topics,
         format_func=_topic_label,
-        key=f"{key_prefix}_topics",
     )
-    diff_range = st.slider("Difficulty range", 1, 5, (1, 5), key=f"{key_prefix}_diff")
+    diff_range = st.slider("Difficulty range", 1, 5, (1, 5))
 
     st.caption("For short-answer questions, minor whitespace and punctuation differences are tolerated.")
     return shuffle, show_expl, selected_topics, diff_range
@@ -169,6 +167,17 @@ def _start_quiz(
     st.rerun()
 
 
+def _detect_mobile() -> bool:
+    """Use JS to read window.innerWidth once and cache in session state."""
+    if "screen_width" not in st.session_state:
+        width = streamlit_js_eval(js_expressions="window.innerWidth", key="screen_width_js")
+        if width is not None:
+            st.session_state.screen_width = int(width)
+        else:
+            return False  # still waiting for JS result
+    return st.session_state.screen_width < MOBILE_BREAKPOINT
+
+
 # ── Main ─────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -176,11 +185,15 @@ def main() -> None:
         page_title="C++ Quiz — Computation in Engineering 1",
         page_icon="💻",
         layout="centered",
-        initial_sidebar_state="collapsed",
+        initial_sidebar_state="expanded",
     )
 
-    # Inject base CSS
-    st.markdown(_BASE_CSS, unsafe_allow_html=True)
+    st.markdown(_HIDE_CHROME_CSS, unsafe_allow_html=True)
+
+    is_mobile = _detect_mobile()
+
+    if is_mobile:
+        st.markdown(_MOBILE_HIDE_SIDEBAR_CSS, unsafe_allow_html=True)
 
     # ── Header ───────────────────────────────────────────────────────────
     st.title("C++ Practice and Revision Questions")
@@ -192,23 +205,32 @@ def main() -> None:
     questions = get_questions()
     q_by_id = _get_by_id(questions)
 
-    # ── Settings (no sidebar) ────────────────────────────────────────────
-    with st.expander("Settings & Filters", expanded="quiz" not in st.session_state):
-        shuffle, show_expl, selected_topics, diff_range = _render_settings(questions, key_prefix="settings")
+    # ── Settings: sidebar on PC, inline expander on mobile ───────────────
+    if is_mobile:
+        with st.expander("Settings & Filters", expanded="quiz" not in st.session_state):
+            shuffle, show_expl, selected_topics, diff_range = _render_settings(questions)
+    else:
+        with st.sidebar:
+            st.subheader("Settings & Filters")
+            shuffle, show_expl, selected_topics, diff_range = _render_settings(questions)
 
-    # ── Start/Restart button (always visible) ────────────────────────────
-    start_label = "Restart" if "quiz" in st.session_state else "Start"
-    if st.button(f"{start_label} Quiz", type="primary", use_container_width=True):
-        _start_quiz(
-            questions,
-            shuffle=shuffle,
-            selected_topics=selected_topics,
-            diff_range=diff_range,
-        )
+    # ── Start / Restart (always visible) ─────────────────────────────────
+    start_label = "Restart Quiz" if "quiz" in st.session_state else "Start Quiz"
+    if is_mobile:
+        if st.button(start_label, type="primary", use_container_width=True):
+            _start_quiz(questions, shuffle=shuffle, selected_topics=selected_topics, diff_range=diff_range)
+    else:
+        with st.sidebar:
+            st.divider()
+            if st.button(start_label, type="primary", use_container_width=True):
+                _start_quiz(questions, shuffle=shuffle, selected_topics=selected_topics, diff_range=diff_range)
 
     # ── Main area ────────────────────────────────────────────────────────
     if "quiz" not in st.session_state:
-        st.info("Open **Settings & Filters** to configure, then press **Start Quiz**.")
+        if is_mobile:
+            st.info("Open **Settings & Filters** above, then press **Start Quiz**.")
+        else:
+            st.info("Use the **sidebar** to configure settings and press **Start Quiz**.")
         return
 
     quiz = st.session_state.quiz
