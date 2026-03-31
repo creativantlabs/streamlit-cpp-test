@@ -73,19 +73,110 @@ def _difficulty_badge(level: int) -> str:
     return f"{stars}  {label}"
 
 
-_HIDE_CHROME = """
+_CUSTOM_CSS = """
 <style>
+    /* ── Hide Streamlit chrome ── */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
     [data-testid="stToolbar"] {display: none;}
+
+    /* ── Mobile-friendly viewport & spacing ── */
+    .stApp {
+        max-width: 100vw;
+        overflow-x: hidden;
+    }
+    .block-container {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        padding-top: 1.5rem !important;
+        max-width: 100% !important;
+    }
+
+    /* ── Touch-friendly buttons (min 44px tap target) ── */
+    .stButton > button {
+        min-height: 48px;
+        font-size: 1rem;
+        border-radius: 10px;
+        padding: 0.5rem 1rem;
+        touch-action: manipulation;
+    }
+
+    /* ── Radio options: larger tap targets ── */
+    .stRadio > div[role="radiogroup"] > label {
+        padding: 0.6rem 0.4rem;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        font-size: 1rem;
+        cursor: pointer;
+    }
+
+    /* ── Text input: comfortable size ── */
+    .stTextInput > div > div > input {
+        font-size: 1rem;
+        min-height: 44px;
+        padding: 0.5rem;
+    }
+
+    /* ── Code blocks: horizontal scroll on narrow screens ── */
+    pre {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        font-size: 0.85rem;
+        max-width: 100%;
+    }
+
+    /* ── Progress bar: full width ── */
+    .stProgress > div {
+        width: 100% !important;
+    }
+
+    /* ── Metric cards: stack nicely on small screens ── */
+    [data-testid="stMetric"] {
+        text-align: center;
+        padding: 0.4rem;
+    }
+    [data-testid="stMetricValue"] {
+        font-size: 1.4rem;
+    }
+
+    /* ── Sidebar: easier to use on mobile ── */
+    section[data-testid="stSidebar"] > div {
+        padding-top: 1rem;
+    }
+    section[data-testid="stSidebar"] .stButton > button {
+        min-height: 52px;
+        font-size: 1.05rem;
+    }
+
+    /* ── Small-screen overrides ── */
+    @media (max-width: 640px) {
+        .block-container {
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+            padding-top: 1rem !important;
+        }
+        h1 { font-size: 1.5rem !important; }
+        h3 { font-size: 1.1rem !important; }
+        .stRadio > div[role="radiogroup"] > label {
+            font-size: 0.95rem;
+            padding: 0.5rem 0.3rem;
+        }
+        [data-testid="stMetricValue"] {
+            font-size: 1.2rem;
+        }
+        pre {
+            font-size: 0.78rem;
+        }
+    }
 </style>
 """
 
 
 def main() -> None:
     st.set_page_config(page_title="C++ Quiz — 150 Questions", layout="centered")
-    st.markdown(_HIDE_CHROME, unsafe_allow_html=True)
+    st.markdown(_CUSTOM_CSS, unsafe_allow_html=True)
 
     st.title("C++ Quiz")
     st.caption(
@@ -211,7 +302,7 @@ def main() -> None:
             placeholder="Type a C++ statement or snippet…",
         )
 
-    cols = st.columns([1, 1, 2])
+    cols = st.columns(3)
     with cols[0]:
         back = st.button("⬅ Back", disabled=(idx == 0), use_container_width=True)
     with cols[1]:
