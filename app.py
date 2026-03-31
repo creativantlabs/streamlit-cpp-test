@@ -72,10 +72,8 @@ _BASE_CSS = """
     .mobile-only { display: none; }
     .desktop-only { display: block; }
 
-    /* Mobile: hide sidebar; show mobile expander */
+    /* Mobile: show inline expander; hide sidebar *content* only */
     @media (max-width: 768px) {
-        /* Hide the sidebar panel on mobile, but keep the reopen button visible. */
-        section[data-testid="stSidebar"] { display: none !important; }
         .mobile-only { display: block; }
         .desktop-only { display: none; }
 
