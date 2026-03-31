@@ -9,7 +9,6 @@ from streamlit_js_eval import streamlit_js_eval
 
 from questions import Question, get_questions
 
-COURSE_URL = "https://www.cee.ed.tum.de/ccbe/teaching/master/computation-in-engineering-1/"
 MOBILE_BREAKPOINT = 768
 
 DIFFICULTY_LABELS = {1: "Beginner", 2: "Easy", 3: "Intermediate", 4: "Hard", 5: "Advanced"}
@@ -198,8 +197,7 @@ def main() -> None:
     # ── Header ───────────────────────────────────────────────────────────
     st.title("C++ Practice and Revision Questions")
     st.caption(
-        f"[Computation in Engineering 1]({COURSE_URL}) — TUM School of Engineering and Design  \n"
-        "150 questions from variable declarations to templates & move semantics."
+        f"150 questions from variable declarations to templates & move semantics."
     )
 
     questions = get_questions()
