@@ -5,10 +5,12 @@ import re
 from dataclasses import asdict
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from questions import Question, get_questions
 
 COURSE_URL = "https://www.cee.ed.tum.de/ccbe/teaching/master/computation-in-engineering-1/"
+MOBILE_BREAKPOINT = 768
 
 DIFFICULTY_LABELS = {1: "Beginner", 2: "Easy", 3: "Intermediate", 4: "Hard", 5: "Advanced"}
 TOPIC_LABELS = {
@@ -34,103 +36,99 @@ TOPIC_LABELS = {
     "templates": "Templates",
 }
 
-_CUSTOM_CSS = """
+# ── CSS: base styles shared by both modes ────────────────────────────────
+_BASE_CSS = """
 <style>
-    /* ── Hide deploy / toolbar buttons but keep the page title visible ── */
     [data-testid="stToolbar"] {display: none !important;}
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
 
-    /* ── Hide sidebar completely (settings are inline now) ── */
+    .stApp { max-width: 100vw; overflow-x: hidden; }
+    .block-container {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        padding-top: 1rem !important;
+    }
+
+    .stButton > button {
+        min-height: 48px; font-size: 1rem; border-radius: 10px;
+        padding: 0.5rem 1rem; touch-action: manipulation;
+    }
+    .stRadio > div[role="radiogroup"] > label {
+        padding: 0.6rem 0.4rem; min-height: 44px;
+        display: flex; align-items: center; font-size: 1rem; cursor: pointer;
+    }
+    .stTextInput > div > div > input {
+        font-size: 1rem; min-height: 44px; padding: 0.5rem;
+    }
+    pre {
+        overflow-x: auto !important; -webkit-overflow-scrolling: touch;
+        font-size: 0.85rem; max-width: 100%;
+    }
+    .stProgress > div { width: 100% !important; }
+    [data-testid="stMetric"] { text-align: center; padding: 0.4rem; }
+    [data-testid="stMetricValue"] { font-size: 1.4rem; }
+</style>
+"""
+
+# ── Extra CSS injected only on mobile ────────────────────────────────────
+_MOBILE_CSS = """
+<style>
     section[data-testid="stSidebar"],
     button[data-testid="stSidebarCollapsedControl"],
     [data-testid="collapsedControl"] {
         display: none !important;
     }
-
-    /* ── Mobile-friendly viewport & spacing ── */
-    .stApp {
-        max-width: 100vw;
-        overflow-x: hidden;
-    }
     .block-container {
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-        padding-top: 1rem !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+        padding-top: 0.5rem !important;
         max-width: 100% !important;
     }
-
-    /* ── Touch-friendly buttons (min 44px tap target) ── */
-    .stButton > button {
-        min-height: 48px;
-        font-size: 1rem;
-        border-radius: 10px;
-        padding: 0.5rem 1rem;
-        touch-action: manipulation;
-    }
-
-    /* ── Radio options: larger tap targets ── */
+    h1 { font-size: 1.5rem !important; }
+    h3 { font-size: 1.1rem !important; }
     .stRadio > div[role="radiogroup"] > label {
-        padding: 0.6rem 0.4rem;
-        min-height: 44px;
-        display: flex;
-        align-items: center;
-        font-size: 1rem;
-        cursor: pointer;
+        font-size: 0.95rem; padding: 0.5rem 0.3rem;
     }
-
-    /* ── Text input: comfortable size ── */
-    .stTextInput > div > div > input {
-        font-size: 1rem;
-        min-height: 44px;
-        padding: 0.5rem;
-    }
-
-    /* ── Code blocks: horizontal scroll on narrow screens ── */
-    pre {
-        overflow-x: auto !important;
-        -webkit-overflow-scrolling: touch;
-        font-size: 0.85rem;
-        max-width: 100%;
-    }
-
-    /* ── Progress bar: full width ── */
-    .stProgress > div {
-        width: 100% !important;
-    }
-
-    /* ── Metric cards ── */
-    [data-testid="stMetric"] {
-        text-align: center;
-        padding: 0.4rem;
-    }
-    [data-testid="stMetricValue"] {
-        font-size: 1.4rem;
-    }
-
-    /* ── Small-screen overrides ── */
-    @media (max-width: 640px) {
-        .block-container {
-            padding-left: 0.5rem !important;
-            padding-right: 0.5rem !important;
-            padding-top: 0.5rem !important;
-        }
-        h1 { font-size: 1.5rem !important; }
-        h3 { font-size: 1.1rem !important; }
-        .stRadio > div[role="radiogroup"] > label {
-            font-size: 0.95rem;
-            padding: 0.5rem 0.3rem;
-        }
-        [data-testid="stMetricValue"] {
-            font-size: 1.2rem;
-        }
-        pre {
-            font-size: 0.78rem;
-        }
-    }
+    [data-testid="stMetricValue"] { font-size: 1.2rem; }
+    pre { font-size: 0.78rem; }
 </style>
 """
 
+# ── JS: detect screen width once, store via query param → session state ──
+_SCREEN_WIDTH_JS = """
+<script>
+(function() {
+    const w = window.innerWidth;
+    const params = new URLSearchParams(window.parent.location.search);
+    const stored = params.get("_sw");
+    if (stored !== String(w)) {
+        params.set("_sw", w);
+        window.parent.history.replaceState(null, "", "?" + params.toString());
+        window.parent.location.reload();
+    }
+})();
+</script>
+"""
+
+
+def _detect_mobile() -> bool:
+    """Return True when the client screen is narrower than MOBILE_BREAKPOINT."""
+    params = st.query_params
+    sw = params.get("_sw")
+    if sw is not None:
+        try:
+            return int(sw) < MOBILE_BREAKPOINT
+        except ValueError:
+            pass
+    return False
+
+
+def _need_width_detection() -> bool:
+    return "_sw" not in st.query_params
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────
 
 def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip().lower())
@@ -172,14 +170,61 @@ def _difficulty_badge(level: int) -> str:
     return f"{stars}  {label}"
 
 
+def _render_settings(questions: list[Question]) -> tuple[bool, bool]:
+    """Render quiz settings controls. Returns (shuffle, show_expl)."""
+    shuffle = st.toggle("Shuffle questions", value=False)
+    show_expl = st.toggle("Show explanation after submit", value=True)
+
+    topics = sorted({q.topic for q in questions})
+    selected_topics = st.multiselect(
+        "Filter by topic",
+        options=topics,
+        default=topics,
+        format_func=_topic_label,
+    )
+    diff_range = st.slider("Difficulty range", 1, 5, (1, 5))
+
+    st.caption("For short-answer questions, minor whitespace and punctuation differences are tolerated.")
+
+    if st.button("Start / Restart", type="primary", use_container_width=True):
+        filtered = [
+            q
+            for q in questions
+            if q.topic in selected_topics
+            and diff_range[0] <= q.difficulty <= diff_range[1]
+        ]
+        if not filtered:
+            st.warning("No questions match your filters.")
+        else:
+            if shuffle:
+                random.shuffle(filtered)
+            _init_state(filtered)
+            st.rerun()
+
+    return shuffle, show_expl
+
+
+# ── Main ─────────────────────────────────────────────────────────────────
+
 def main() -> None:
     st.set_page_config(
         page_title="C++ Quiz — Computation in Engineering 1",
         page_icon="💻",
         layout="centered",
-        initial_sidebar_state="collapsed",
+        initial_sidebar_state="expanded",
     )
-    st.markdown(_CUSTOM_CSS, unsafe_allow_html=True)
+
+    # Inject base CSS
+    st.markdown(_BASE_CSS, unsafe_allow_html=True)
+
+    # Detect screen width on first visit
+    if _need_width_detection():
+        components.html(_SCREEN_WIDTH_JS, height=0, width=0)
+
+    is_mobile = _detect_mobile()
+
+    if is_mobile:
+        st.markdown(_MOBILE_CSS, unsafe_allow_html=True)
 
     # ── Header ───────────────────────────────────────────────────────────
     st.title("C++ Quiz")
@@ -191,40 +236,21 @@ def main() -> None:
     questions = get_questions()
     q_by_id = _get_by_id(questions)
 
-    # ── Settings (inline expander — works on mobile) ─────────────────────
-    with st.expander("Settings & Filters", expanded="quiz" not in st.session_state):
-        shuffle = st.toggle("Shuffle questions", value=False)
-        show_expl = st.toggle("Show explanation after submit", value=True)
-
-        topics = sorted({q.topic for q in questions})
-        selected_topics = st.multiselect(
-            "Filter by topic",
-            options=topics,
-            default=topics,
-            format_func=_topic_label,
-        )
-        diff_range = st.slider("Difficulty range", 1, 5, (1, 5))
-
-        st.caption("For short-answer questions, minor whitespace and punctuation differences are tolerated.")
-
-        if st.button("Start / Restart", type="primary", use_container_width=True):
-            filtered = [
-                q
-                for q in questions
-                if q.topic in selected_topics
-                and diff_range[0] <= q.difficulty <= diff_range[1]
-            ]
-            if not filtered:
-                st.warning("No questions match your filters.")
-            else:
-                if shuffle:
-                    random.shuffle(filtered)
-                _init_state(filtered)
-                st.rerun()
+    # ── Settings: sidebar on desktop, inline expander on mobile ──────────
+    if is_mobile:
+        with st.expander("Settings & Filters", expanded="quiz" not in st.session_state):
+            shuffle, show_expl = _render_settings(questions)
+    else:
+        with st.sidebar:
+            st.subheader("Settings & Filters")
+            shuffle, show_expl = _render_settings(questions)
 
     # ── Main area ────────────────────────────────────────────────────────
     if "quiz" not in st.session_state:
-        st.info("Choose your settings above and press **Start / Restart** to begin.")
+        if is_mobile:
+            st.info("Open **Settings & Filters** above and press **Start / Restart** to begin.")
+        else:
+            st.info("Use the **sidebar** to configure settings and press **Start / Restart** to begin.")
         return
 
     quiz = st.session_state.quiz
