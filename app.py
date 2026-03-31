@@ -8,6 +8,8 @@ import streamlit as st
 
 from questions import Question, get_questions
 
+COURSE_URL = "https://www.cee.ed.tum.de/ccbe/teaching/master/computation-in-engineering-1/"
+
 DIFFICULTY_LABELS = {1: "Beginner", 2: "Easy", 3: "Intermediate", 4: "Hard", 5: "Advanced"}
 TOPIC_LABELS = {
     "variables": "Variables",
@@ -32,54 +34,19 @@ TOPIC_LABELS = {
     "templates": "Templates",
 }
 
-
-def _norm(s: str) -> str:
-    return re.sub(r"\s+", " ", s.strip().lower())
-
-
-def _short_answer_matches(user_answer: str, expected: str) -> bool:
-    ua = _norm(user_answer)
-    ex = _norm(expected)
-    if not ua:
-        return False
-    strip_tokens = lambda t: re.sub(r"[;(){}\[\],]", "", t)
-    return ua == ex or strip_tokens(ua) == strip_tokens(ex)
-
-
-def _init_state(questions: list[Question]) -> None:
-    st.session_state.quiz = {
-        "order": [q.id for q in questions],
-        "idx": 0,
-        "answers": {},
-        "started": True,
-    }
-
-
-def _get_by_id(questions: list[Question]) -> dict[int, Question]:
-    return {q.id: q for q in questions}
-
-
-def _render_code_snippet(code: str) -> None:
-    st.code(code, language="cpp")
-
-
-def _topic_label(topic: str) -> str:
-    return TOPIC_LABELS.get(topic, topic.replace("_", " ").title())
-
-
-def _difficulty_badge(level: int) -> str:
-    label = DIFFICULTY_LABELS.get(level, f"Level {level}")
-    stars = "★" * level + "☆" * (5 - level)
-    return f"{stars}  {label}"
-
-
 _CUSTOM_CSS = """
 <style>
-    /* ── Hide Streamlit chrome ── */
-    #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
-    [data-testid="stToolbar"] {display: none;}
+    /* ── Hide deploy / toolbar buttons but keep the page title visible ── */
+    [data-testid="stToolbar"] {display: none !important;}
+    #MainMenu {visibility: hidden !important;}
+    footer {visibility: hidden !important;}
+
+    /* ── Hide sidebar completely (settings are inline now) ── */
+    section[data-testid="stSidebar"],
+    button[data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"] {
+        display: none !important;
+    }
 
     /* ── Mobile-friendly viewport & spacing ── */
     .stApp {
@@ -89,7 +56,7 @@ _CUSTOM_CSS = """
     .block-container {
         padding-left: 1rem !important;
         padding-right: 1rem !important;
-        padding-top: 1.5rem !important;
+        padding-top: 1rem !important;
         max-width: 100% !important;
     }
 
@@ -132,7 +99,7 @@ _CUSTOM_CSS = """
         width: 100% !important;
     }
 
-    /* ── Metric cards: stack nicely on small screens ── */
+    /* ── Metric cards ── */
     [data-testid="stMetric"] {
         text-align: center;
         padding: 0.4rem;
@@ -141,21 +108,12 @@ _CUSTOM_CSS = """
         font-size: 1.4rem;
     }
 
-    /* ── Sidebar: easier to use on mobile ── */
-    section[data-testid="stSidebar"] > div {
-        padding-top: 1rem;
-    }
-    section[data-testid="stSidebar"] .stButton > button {
-        min-height: 52px;
-        font-size: 1.05rem;
-    }
-
     /* ── Small-screen overrides ── */
     @media (max-width: 640px) {
         .block-container {
             padding-left: 0.5rem !important;
             padding-right: 0.5rem !important;
-            padding-top: 1rem !important;
+            padding-top: 0.5rem !important;
         }
         h1 { font-size: 1.5rem !important; }
         h3 { font-size: 1.1rem !important; }
@@ -174,22 +132,67 @@ _CUSTOM_CSS = """
 """
 
 
+def _norm(s: str) -> str:
+    return re.sub(r"\s+", " ", s.strip().lower())
+
+
+def _short_answer_matches(user_answer: str, expected: str) -> bool:
+    ua = _norm(user_answer)
+    ex = _norm(expected)
+    if not ua:
+        return False
+    strip_tokens = lambda t: re.sub(r"[;(){}\[\],]", "", t)
+    return ua == ex or strip_tokens(ua) == strip_tokens(ex)
+
+
+def _init_state(questions: list[Question]) -> None:
+    st.session_state.quiz = {
+        "order": [q.id for q in questions],
+        "idx": 0,
+        "answers": {},
+        "started": True,
+    }
+
+
+def _get_by_id(questions: list[Question]) -> dict[int, Question]:
+    return {q.id: q for q in questions}
+
+
+def _render_code_snippet(code: str) -> None:
+    st.code(code, language="cpp")
+
+
+def _topic_label(topic: str) -> str:
+    return TOPIC_LABELS.get(topic, topic.replace("_", " ").title())
+
+
+def _difficulty_badge(level: int) -> str:
+    label = DIFFICULTY_LABELS.get(level, f"Level {level}")
+    stars = "★" * level + "☆" * (5 - level)
+    return f"{stars}  {label}"
+
+
 def main() -> None:
-    st.set_page_config(page_title="C++ Quiz — 150 Questions", layout="centered")
+    st.set_page_config(
+        page_title="C++ Quiz — Computation in Engineering 1",
+        page_icon="💻",
+        layout="centered",
+        initial_sidebar_state="collapsed",
+    )
     st.markdown(_CUSTOM_CSS, unsafe_allow_html=True)
 
+    # ── Header ───────────────────────────────────────────────────────────
     st.title("C++ Quiz")
     st.caption(
-        "150 questions — from variable declarations to templates & move semantics. "
-        "Answers are checked locally in your browser."
+        f"[Computation in Engineering 1]({COURSE_URL}) — TUM School of Engineering and Design  \n"
+        "150 questions from variable declarations to templates & move semantics."
     )
 
     questions = get_questions()
     q_by_id = _get_by_id(questions)
 
-    # ── Sidebar ──────────────────────────────────────────────────────────
-    with st.sidebar:
-        st.subheader("Settings")
+    # ── Settings (inline expander — works on mobile) ─────────────────────
+    with st.expander("Settings & Filters", expanded="quiz" not in st.session_state):
         shuffle = st.toggle("Shuffle questions", value=False)
         show_expl = st.toggle("Show explanation after submit", value=True)
 
@@ -202,7 +205,8 @@ def main() -> None:
         )
         diff_range = st.slider("Difficulty range", 1, 5, (1, 5))
 
-        st.divider()
+        st.caption("For short-answer questions, minor whitespace and punctuation differences are tolerated.")
+
         if st.button("Start / Restart", type="primary", use_container_width=True):
             filtered = [
                 q
@@ -218,12 +222,9 @@ def main() -> None:
                 _init_state(filtered)
                 st.rerun()
 
-        st.divider()
-        st.caption("**Tip:** For short-answer questions, minor whitespace and punctuation differences are tolerated.")
-
     # ── Main area ────────────────────────────────────────────────────────
     if "quiz" not in st.session_state:
-        st.info("Configure filters in the sidebar and press **Start / Restart** to begin.")
+        st.info("Choose your settings above and press **Start / Restart** to begin.")
         return
 
     quiz = st.session_state.quiz
