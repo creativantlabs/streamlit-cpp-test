@@ -5,7 +5,6 @@ import re
 from dataclasses import asdict
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from questions import Question, get_questions
 
@@ -68,65 +67,37 @@ _BASE_CSS = """
     .stProgress > div { width: 100% !important; }
     [data-testid="stMetric"] { text-align: center; padding: 0.4rem; }
     [data-testid="stMetricValue"] { font-size: 1.4rem; }
+
+    /* Wrappers used to conditionally show settings UI */
+    .mobile-only { display: none; }
+    .desktop-only { display: block; }
+
+    /* Mobile: hide sidebar; show mobile expander */
+    @media (max-width: 768px) {
+        section[data-testid="stSidebar"],
+        button[data-testid="stSidebarCollapsedControl"],
+        [data-testid="collapsedControl"] {
+            display: none !important;
+        }
+        .mobile-only { display: block; }
+        .desktop-only { display: none; }
+
+        .block-container {
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+            padding-top: 0.5rem !important;
+            max-width: 100% !important;
+        }
+        h1 { font-size: 1.5rem !important; }
+        h3 { font-size: 1.1rem !important; }
+        .stRadio > div[role="radiogroup"] > label {
+            font-size: 0.95rem; padding: 0.5rem 0.3rem;
+        }
+        [data-testid="stMetricValue"] { font-size: 1.2rem; }
+        pre { font-size: 0.78rem; }
+    }
 </style>
 """
-
-# ── Extra CSS injected only on mobile ────────────────────────────────────
-_MOBILE_CSS = """
-<style>
-    section[data-testid="stSidebar"],
-    button[data-testid="stSidebarCollapsedControl"],
-    [data-testid="collapsedControl"] {
-        display: none !important;
-    }
-    .block-container {
-        padding-left: 0.5rem !important;
-        padding-right: 0.5rem !important;
-        padding-top: 0.5rem !important;
-        max-width: 100% !important;
-    }
-    h1 { font-size: 1.5rem !important; }
-    h3 { font-size: 1.1rem !important; }
-    .stRadio > div[role="radiogroup"] > label {
-        font-size: 0.95rem; padding: 0.5rem 0.3rem;
-    }
-    [data-testid="stMetricValue"] { font-size: 1.2rem; }
-    pre { font-size: 0.78rem; }
-</style>
-"""
-
-# ── JS: detect screen width once, store via query param → session state ──
-_SCREEN_WIDTH_JS = """
-<script>
-(function() {
-    const w = window.innerWidth;
-    const params = new URLSearchParams(window.parent.location.search);
-    const stored = params.get("_sw");
-    if (stored !== String(w)) {
-        params.set("_sw", w);
-        window.parent.history.replaceState(null, "", "?" + params.toString());
-        window.parent.location.reload();
-    }
-})();
-</script>
-"""
-
-
-def _detect_mobile() -> bool:
-    """Return True when the client screen is narrower than MOBILE_BREAKPOINT."""
-    params = st.query_params
-    sw = params.get("_sw")
-    if sw is not None:
-        try:
-            return int(sw) < MOBILE_BREAKPOINT
-        except ValueError:
-            pass
-    return False
-
-
-def _need_width_detection() -> bool:
-    return "_sw" not in st.query_params
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -217,15 +188,6 @@ def main() -> None:
     # Inject base CSS
     st.markdown(_BASE_CSS, unsafe_allow_html=True)
 
-    # Detect screen width on first visit
-    if _need_width_detection():
-        components.html(_SCREEN_WIDTH_JS, height=0, width=0)
-
-    is_mobile = _detect_mobile()
-
-    if is_mobile:
-        st.markdown(_MOBILE_CSS, unsafe_allow_html=True)
-
     # ── Header ───────────────────────────────────────────────────────────
     st.title("C++ Quiz")
     st.caption(
@@ -236,21 +198,21 @@ def main() -> None:
     questions = get_questions()
     q_by_id = _get_by_id(questions)
 
-    # ── Settings: sidebar on desktop, inline expander on mobile ──────────
-    if is_mobile:
-        with st.expander("Settings & Filters", expanded="quiz" not in st.session_state):
-            shuffle, show_expl = _render_settings(questions)
-    else:
-        with st.sidebar:
-            st.subheader("Settings & Filters")
-            shuffle, show_expl = _render_settings(questions)
+    # ── Settings: render BOTH, CSS decides visibility ────────────────────
+    with st.sidebar:
+        st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
+        st.subheader("Settings & Filters")
+        shuffle, show_expl = _render_settings(questions)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('<div class="mobile-only">', unsafe_allow_html=True)
+    with st.expander("Settings & Filters", expanded="quiz" not in st.session_state):
+        shuffle, show_expl = _render_settings(questions)
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # ── Main area ────────────────────────────────────────────────────────
     if "quiz" not in st.session_state:
-        if is_mobile:
-            st.info("Open **Settings & Filters** above and press **Start / Restart** to begin.")
-        else:
-            st.info("Use the **sidebar** to configure settings and press **Start / Restart** to begin.")
+        st.info("Open **Settings & Filters** to configure and press **Start / Restart** to begin.")
         return
 
     quiz = st.session_state.quiz
