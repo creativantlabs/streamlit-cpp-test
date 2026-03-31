@@ -136,10 +136,10 @@ def _difficulty_badge(level: int) -> str:
     return f"{stars}  {label}"
 
 
-def _render_settings(questions: list[Question]) -> tuple[bool, bool]:
-    """Render quiz settings controls. Returns (shuffle, show_expl)."""
-    shuffle = st.toggle("Shuffle questions", value=False)
-    show_expl = st.toggle("Show explanation after submit", value=True)
+def _render_settings(questions: list[Question], *, key_prefix: str) -> tuple[bool, bool, list[str], tuple[int, int]]:
+    """Render quiz settings controls (without start button)."""
+    shuffle = st.toggle("Shuffle questions", value=False, key=f"{key_prefix}_shuffle")
+    show_expl = st.toggle("Show explanation after submit", value=True, key=f"{key_prefix}_show_expl")
 
     topics = sorted({q.topic for q in questions})
     selected_topics = st.multiselect(
@@ -147,27 +147,33 @@ def _render_settings(questions: list[Question]) -> tuple[bool, bool]:
         options=topics,
         default=topics,
         format_func=_topic_label,
+        key=f"{key_prefix}_topics",
     )
-    diff_range = st.slider("Difficulty range", 1, 5, (1, 5))
+    diff_range = st.slider("Difficulty range", 1, 5, (1, 5), key=f"{key_prefix}_diff")
 
     st.caption("For short-answer questions, minor whitespace and punctuation differences are tolerated.")
+    return shuffle, show_expl, selected_topics, diff_range
 
-    if st.button("Start / Restart", type="primary", use_container_width=True):
-        filtered = [
-            q
-            for q in questions
-            if q.topic in selected_topics
-            and diff_range[0] <= q.difficulty <= diff_range[1]
-        ]
-        if not filtered:
-            st.warning("No questions match your filters.")
-        else:
-            if shuffle:
-                random.shuffle(filtered)
-            _init_state(filtered)
-            st.rerun()
 
-    return shuffle, show_expl
+def _start_quiz(
+    questions: list[Question],
+    *,
+    shuffle: bool,
+    selected_topics: list[str],
+    diff_range: tuple[int, int],
+) -> None:
+    filtered = [
+        q
+        for q in questions
+        if q.topic in selected_topics and diff_range[0] <= q.difficulty <= diff_range[1]
+    ]
+    if not filtered:
+        st.warning("No questions match your filters.")
+        return
+    if shuffle:
+        random.shuffle(filtered)
+    _init_state(filtered)
+    st.rerun()
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
@@ -186,7 +192,7 @@ def main() -> None:
     # ── Header ───────────────────────────────────────────────────────────
     st.title("C++ Practice and Revision Questions")
     st.caption(
-        f"[150 questions from variable declarations to templates & move semantics."
+        f"150 questions from variable declarations to templates & move semantics."
     )
 
     questions = get_questions()
@@ -196,17 +202,37 @@ def main() -> None:
     with st.sidebar:
         st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
         st.subheader("Settings & Filters")
-        shuffle, show_expl = _render_settings(questions)
+        shuffle_d, show_expl_d, topics_d, diff_d = _render_settings(questions, key_prefix="desk")
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="mobile-only">', unsafe_allow_html=True)
     with st.expander("Settings & Filters", expanded="quiz" not in st.session_state):
-        shuffle, show_expl = _render_settings(questions)
+        shuffle_m, show_expl_m, topics_m, diff_m = _render_settings(questions, key_prefix="mob")
     st.markdown("</div>", unsafe_allow_html=True)
+
+    # Pick the active settings based on screen size (CSS decides what's visible).
+    # If the mobile controls are visible, users interact with those; otherwise desktop.
+    # We default to desktop values unless mobile values exist and differ.
+    # (Streamlit will still create both sets of widgets; this keeps behavior intuitive.)
+    use_mobile = st.session_state.get("mob_diff") is not None and st.session_state.get("mob_topics") is not None
+    shuffle = shuffle_m if use_mobile else shuffle_d
+    show_expl = show_expl_m if use_mobile else show_expl_d
+    selected_topics = topics_m if use_mobile else topics_d
+    diff_range = diff_m if use_mobile else diff_d
+
+    # ── Start/Restart button (always visible) ────────────────────────────
+    start_label = "Restart" if "quiz" in st.session_state else "Start"
+    if st.button(f"{start_label} Quiz", type="primary", use_container_width=True):
+        _start_quiz(
+            questions,
+            shuffle=shuffle,
+            selected_topics=selected_topics,
+            diff_range=diff_range,
+        )
 
     # ── Main area ────────────────────────────────────────────────────────
     if "quiz" not in st.session_state:
-        st.info("Open **Settings & Filters** to configure and press **Start / Restart** to begin.")
+        st.info("Open **Settings & Filters** to configure, then press **Start Quiz**.")
         return
 
     quiz = st.session_state.quiz
