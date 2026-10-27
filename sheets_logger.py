@@ -11,9 +11,12 @@ If credentials are missing the logger silently does nothing (graceful degradatio
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 import streamlit as st
+
+log = logging.getLogger("cppquiz.sheets")
 
 _client = None
 _sheet = None
@@ -30,6 +33,11 @@ def _is_available() -> bool:
     except (KeyError, FileNotFoundError):
         _available = False
     return _available
+
+
+def is_enabled() -> bool:
+    """True when Google Sheets credentials are configured (logging will be attempted)."""
+    return _is_available()
 
 
 def _get_sheet():
@@ -59,9 +67,11 @@ def _get_or_create_worksheet(name: str, headers: list[str]):
     sheet = _get_sheet()
     if sheet is None:
         return None
+    import gspread
+
     try:
         ws = sheet.worksheet(name)
-    except Exception:
+    except gspread.WorksheetNotFound:
         ws = sheet.add_worksheet(title=name, rows=1000, cols=len(headers))
         ws.append_row(headers)
     return ws
@@ -123,7 +133,7 @@ def log_submission(
             value_input_option="RAW",
         )
     except Exception:
-        pass
+        log.warning("Could not log to Google Sheets", exc_info=True)
 
 
 def log_completion(
@@ -150,4 +160,4 @@ def log_completion(
             value_input_option="RAW",
         )
     except Exception:
-        pass
+        log.warning("Could not log to Google Sheets", exc_info=True)

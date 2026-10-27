@@ -18,11 +18,17 @@ class Question:
     topic: str
     difficulty: int  # 1..5
     code_snippet: str | None = None  # optional C++ code block shown with the prompt
+    flowchart: str | None = None  # optional Graphviz DOT source shown with the prompt
+    # For "pick the right flowchart/code" questions: one visual per option label
+    # ("Flowchart A", ...), rendered above the radio buttons.
+    option_visuals: list[str] | None = None
+    visual_kind: Literal["dot", "cpp"] = "dot"
 
 
 def get_questions() -> list[Question]:
     """
-    150 C++ questions ordered from basics -> advanced OOP / modern C++.
+    150 base C++ questions ordered from basics -> advanced OOP / modern C++,
+    followed by the extra pointer/array/namespace/library/stdlib/flowchart questions.
 
     Topics covered:
       - variables, types, literals, operators, IO           (1-25)
@@ -1602,4 +1608,7 @@ def get_questions() -> list[Question]:
     )
 
     assert len(q) == 150, f"Expected 150 questions, got {len(q)}"
-    return q
+
+    from questions_extra import extra_questions
+
+    return q + extra_questions(start_id=len(q) + 1)

@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import random
 import re
-from dataclasses import asdict
 
 import streamlit as st
 from streamlit_js_eval import streamlit_js_eval
 
 from questions import Question, get_questions
-# To enable Google Sheets logging, uncomment the next line and see README.md:
-# from sheets_logger import log_submission, log_completion
+from sheets_logger import is_enabled as logging_enabled, log_completion, log_submission
 
 MOBILE_BREAKPOINT = 768
+MAX_STUDENT_ID_LEN = 64
+ANONYMOUS_ID = "anonymous"
 
 DIFFICULTY_LABELS = {1: "Beginner", 2: "Easy", 3: "Intermediate", 4: "Hard", 5: "Advanced"}
 TOPIC_LABELS = {
@@ -35,6 +35,9 @@ TOPIC_LABELS = {
     "modern_cpp": "Modern C++",
     "exceptions": "Exceptions",
     "templates": "Templates",
+    "namespaces": "Namespaces",
+    "libraries": "Libraries & Linking",
+    "flowcharts": "Flowcharts",
 }
 
 _HIDE_CHROME_CSS = """
@@ -102,12 +105,21 @@ def _short_answer_matches(user_answer: str, expected: str) -> bool:
     return ua == ex or strip_tokens(ua) == strip_tokens(ex)
 
 
-def _init_state(questions: list[Question]) -> None:
+def _clean_student_id(raw: str) -> str:
+    return re.sub(r"\s+", " ", raw.strip())[:MAX_STUDENT_ID_LEN]
+
+
+def _init_state(questions: list[Question], student_id: str) -> None:
+    # Drop answer widgets left over from a previous attempt so a restart starts blank.
+    for key in [k for k in st.session_state if re.fullmatch(r"q\d+_(radio|text)", str(k))]:
+        del st.session_state[key]
     st.session_state.quiz = {
         "order": [q.id for q in questions],
         "idx": 0,
         "answers": {},
         "started": True,
+        "student_id": student_id or ANONYMOUS_ID,
+        "completion_logged": False,
     }
 
 
@@ -117,6 +129,25 @@ def _get_by_id(questions: list[Question]) -> dict[int, Question]:
 
 def _render_code_snippet(code: str) -> None:
     st.code(code, language="cpp")
+
+
+def _render_flowchart(dot: str) -> None:
+    st.graphviz_chart(dot)
+
+
+def _render_visual(kind: str, content: str) -> None:
+    if kind == "dot":
+        _render_flowchart(content)
+    else:
+        _render_code_snippet(content)
+
+
+def _render_option_visuals(q: Question) -> None:
+    """Show every option's diagram/code under its label (A, B, C, ...)."""
+    assert q.options is not None and q.option_visuals is not None
+    for label, content in zip(q.options, q.option_visuals):
+        st.markdown(f"**{label}**")
+        _render_visual(q.visual_kind, content)
 
 
 def _topic_label(topic: str) -> str:
@@ -129,8 +160,17 @@ def _difficulty_badge(level: int) -> str:
     return f"{stars}  {label}"
 
 
-def _render_settings(questions: list[Question]) -> tuple[bool, bool, list[str], tuple[int, int]]:
-    """Render filter/settings controls. Returns (shuffle, show_expl, topics, diff_range)."""
+def _render_settings(questions: list[Question]) -> tuple[bool, bool, list[str], tuple[int, int], str]:
+    """Render ID + filter controls. Returns (shuffle, show_expl, topics, diff_range, student_id)."""
+    required = logging_enabled()
+    student_id = _clean_student_id(
+        st.text_input(
+            "Student ID" if required else "Student ID (optional)",
+            max_chars=MAX_STUDENT_ID_LEN,
+            key="student_id_input",
+            help="Your answers are logged under this ID for instructor review." if required else None,
+        )
+    )
     shuffle = st.toggle("Shuffle questions", value=False)
     show_expl = st.toggle("Show explanation after submit", value=True)
 
@@ -144,7 +184,7 @@ def _render_settings(questions: list[Question]) -> tuple[bool, bool, list[str], 
     diff_range = st.slider("Difficulty range", 1, 5, (1, 5))
 
     st.caption("For short-answer questions, minor whitespace and punctuation differences are tolerated.")
-    return shuffle, show_expl, selected_topics, diff_range
+    return shuffle, show_expl, selected_topics, diff_range, student_id
 
 
 def _start_quiz(
@@ -153,7 +193,11 @@ def _start_quiz(
     shuffle: bool,
     selected_topics: list[str],
     diff_range: tuple[int, int],
+    student_id: str,
 ) -> None:
+    if logging_enabled() and not student_id:
+        st.warning("Please enter your Student ID before starting.")
+        return
     filtered = [
         q
         for q in questions
@@ -164,7 +208,7 @@ def _start_quiz(
         return
     if shuffle:
         random.shuffle(filtered)
-    _init_state(filtered)
+    _init_state(filtered, student_id)
     st.rerun()
 
 
@@ -198,34 +242,38 @@ def main() -> None:
 
     # ── Header ───────────────────────────────────────────────────────────
     st.title("C++ Practice and Revision Questions")
-    st.caption(
-        "[Computation in Engineering 1](https://www.cee.ed.tum.de/ccbe/teaching/master/computation-in-engineering-1/) "
-        "— TUM School of Engineering and Design  \n"
-        "150 questions from variable declarations to templates & move semantics."
-    )
-
     questions = get_questions()
+    st.caption(
+        f"{len(questions)} questions from variable declarations to templates, "
+        "pointers, namespaces, the standard library and flowcharts."
+    )
     q_by_id = _get_by_id(questions)
 
     # ── Settings: sidebar on PC, inline expander on mobile ───────────────
     if is_mobile:
         with st.expander("Settings & Filters", expanded="quiz" not in st.session_state):
-            shuffle, show_expl, selected_topics, diff_range = _render_settings(questions)
+            shuffle, show_expl, selected_topics, diff_range, student_id = _render_settings(questions)
     else:
         with st.sidebar:
             st.subheader("Settings & Filters")
-            shuffle, show_expl, selected_topics, diff_range = _render_settings(questions)
+            shuffle, show_expl, selected_topics, diff_range, student_id = _render_settings(questions)
 
     # ── Start / Restart (always visible) ─────────────────────────────────
     start_label = "Restart Quiz" if "quiz" in st.session_state else "Start Quiz"
     if is_mobile:
         if st.button(start_label, type="primary", use_container_width=True):
-            _start_quiz(questions, shuffle=shuffle, selected_topics=selected_topics, diff_range=diff_range)
+            _start_quiz(
+                questions, shuffle=shuffle, selected_topics=selected_topics,
+                diff_range=diff_range, student_id=student_id,
+            )
     else:
         with st.sidebar:
             st.divider()
             if st.button(start_label, type="primary", use_container_width=True):
-                _start_quiz(questions, shuffle=shuffle, selected_topics=selected_topics, diff_range=diff_range)
+                _start_quiz(
+                questions, shuffle=shuffle, selected_topics=selected_topics,
+                diff_range=diff_range, student_id=student_id,
+            )
 
     # ── Main area ────────────────────────────────────────────────────────
     if "quiz" not in st.session_state:
@@ -247,6 +295,10 @@ def main() -> None:
         correct = sum(1 for a in answers.values() if a.get("correct") is True)
         pct = correct / total * 100 if total else 0
 
+        if not quiz.get("completion_logged"):
+            quiz["completion_logged"] = True
+            log_completion(quiz["student_id"], total, correct)
+
         st.success("Quiz finished!")
         col1, col2, col3 = st.columns(3)
         col1.metric("Score", f"{correct} / {total}")
@@ -266,6 +318,10 @@ def main() -> None:
                 st.write(q.prompt)
                 if q.code_snippet:
                     _render_code_snippet(q.code_snippet)
+                if q.flowchart:
+                    _render_flowchart(q.flowchart)
+                if q.option_visuals and q.options:
+                    _render_option_visuals(q)
                 st.write(f"**Your answer:** {a.get('user_answer', '') or '—'}")
                 st.write(f"**Correct answer:** {q.answer}")
                 st.caption(q.explanation)
@@ -287,35 +343,47 @@ def main() -> None:
 
     if q.code_snippet:
         _render_code_snippet(q.code_snippet)
+    if q.flowchart:
+        _render_flowchart(q.flowchart)
+    if q.option_visuals and q.options:
+        _render_option_visuals(q)
 
     key_prefix = f"q{qid}"
     already = answers.get(qid)
+    locked = already is not None  # the first submitted answer is final
 
     if q.type == "mcq":
         assert q.options is not None
-        default_index = 0
-        if already and already.get("user_answer") in q.options:
-            default_index = q.options.index(already["user_answer"])
-        user_choice = st.radio(
+        # No preselected option: Submit stays disabled until the student picks one.
+        # (Widget state is dropped when leaving a question, so restore a locked answer explicitly.)
+        locked_index = q.options.index(already["user_answer"]) if locked and already["user_answer"] in q.options else None
+        user_answer = st.radio(
             "Select one:",
             q.options,
-            index=default_index,
+            index=locked_index,
             key=f"{key_prefix}_radio",
+            disabled=locked,
         )
-        user_answer = user_choice
     else:
         user_answer = st.text_input(
             "Your answer:",
-            value=(already.get("user_answer", "") if already else ""),
+            value=already["user_answer"] if locked else "",
             key=f"{key_prefix}_text",
             placeholder="Type a C++ statement or snippet…",
+            disabled=locked,
         )
+    has_input = bool(user_answer and str(user_answer).strip())
 
     cols = st.columns(3)
     with cols[0]:
         back = st.button("⬅ Back", disabled=(idx == 0), use_container_width=True)
     with cols[1]:
-        submit = st.button("Submit", type="primary", use_container_width=True)
+        submit = st.button(
+            "Submitted" if locked else "Submit",
+            type="primary",
+            use_container_width=True,
+            disabled=locked or not has_input,
+        )
     with cols[2]:
         next_btn = st.button("Next ➡", disabled=(qid not in answers), use_container_width=True)
 
@@ -323,18 +391,24 @@ def main() -> None:
         quiz["idx"] = max(0, idx - 1)
         st.rerun()
 
-    if submit:
+    if submit and not locked:
         if q.type == "mcq":
             correct = user_answer == q.answer
         else:
             correct = _short_answer_matches(user_answer, q.answer)
 
-        quiz["answers"][qid] = {
-            "question": asdict(q),
-            "user_answer": user_answer,
-            "correct": bool(correct),
-        }
-
+        quiz["answers"][qid] = {"user_answer": user_answer, "correct": bool(correct)}
+        log_submission(
+            student_id=quiz["student_id"],
+            question_id=qid,
+            question_type=q.type,
+            topic=q.topic,
+            difficulty=q.difficulty,
+            prompt=q.prompt,
+            user_answer=str(user_answer),
+            correct_answer=q.answer,
+            is_correct=bool(correct),
+        )
         st.rerun()
 
     if qid in answers:

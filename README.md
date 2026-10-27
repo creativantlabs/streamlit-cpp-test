@@ -1,6 +1,6 @@
-# Streamlit C++ Quiz (150 Questions)
+# Streamlit C++ Quiz (224 Questions)
 
-Interactive Streamlit app where students answer **150 C++ questions** from fundamentals (variables, IO, control flow) up to **classes/OOP**, inheritance, templates, and modern C++.
+Interactive Streamlit app where students answer **224 C++ questions** from fundamentals (variables, IO, control flow) up to **classes/OOP**, inheritance, templates, and modern C++. Extra sets cover pointers, arrays, namespaces, libraries/linking, the standard library and **flowcharts** (including procedural exercises where students pick the correct flowchart or the matching C++ code).
 
 Submissions are optionally logged to **Google Sheets** for instructor review.
 
@@ -35,6 +35,8 @@ Commit and push these files:
 ## Google Sheets logging (optional)
 
 Logging is optional. If no credentials are configured, the app works normally without logging.
+
+When credentials are configured, students must enter a **Student ID** before starting (it is the `student_id` column below); without credentials the ID field is optional and nothing is logged. Each question's first submitted answer is final and logged once; the completion row is written once per finished quiz.
 
 ### Setup steps
 
@@ -85,6 +87,7 @@ client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/..."
 ## Files
 
 - `app.py` — Streamlit UI (progress, submit/feedback, score, review, shuffle)
-- `questions.py` — The 150 questions (MCQ + short answer)
+- `questions.py` — The 150 base questions (MCQ + short answer)
+- `questions_extra.py` — 74 extra questions; flowcharts are Graphviz DOT built by small helpers and rendered with `st.graphviz_chart` (no extra dependency)
 - `sheets_logger.py` — Google Sheets logging (graceful degradation if unconfigured)
 - `.streamlit/config.toml` — Streamlit theme & settings
